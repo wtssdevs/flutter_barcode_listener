@@ -32,32 +32,30 @@ class BarcodeKeyboardListener extends StatefulWidget {
   /// It will buffer all characters coming in specifed `bufferDuration` time frame
   /// that end with line feed character and call callback function with result.
   /// Keep in mind this widget will listen for events even when not visible.
-  BarcodeKeyboardListener(
-      {Key? key,
+  BarcodeKeyboardListener({
+    Key? key,
 
-      /// Child widget to be displayed.
-      required this.child,
+    /// Child widget to be displayed.
+    required this.child,
 
-      /// Callback to be called when barcode is scanned.
-      required Function(String) onBarcodeScanned,
+    /// Callback to be called when barcode is scanned.
+    required Function(String) onBarcodeScanned,
 
-      /// When experiencing issueswith empty barcodes on Windows,
-      /// set this value to true. Default value is `false`.
-      this.useKeyDownEvent = false,
+    /// When experiencing issueswith empty barcodes on Windows,
+    /// set this value to true. Default value is `false`.
+    this.useKeyDownEvent = false,
 
-      /// Maximum time between two key events.
-      /// If time between two key events is longer than this value
-      /// previous keys will be ignored.
-      Duration bufferDuration = hundredMs,
-      this.caseSensitive = false,
-      })
-      : _onBarcodeScanned = onBarcodeScanned,
+    /// Maximum time between two key events.
+    /// If time between two key events is longer than this value
+    /// previous keys will be ignored.
+    Duration bufferDuration = hundredMs,
+    this.caseSensitive = false,
+  })  : _onBarcodeScanned = onBarcodeScanned,
         _bufferDuration = bufferDuration,
         super(key: key);
 
   @override
-  _BarcodeKeyboardListenerState createState() => _BarcodeKeyboardListenerState(
-      _onBarcodeScanned, _bufferDuration, useKeyDownEvent, caseSensitive);
+  _BarcodeKeyboardListenerState createState() => _BarcodeKeyboardListenerState(_onBarcodeScanned, _bufferDuration, useKeyDownEvent, caseSensitive);
 }
 
 const Duration aSecond = Duration(seconds: 1);
@@ -80,11 +78,9 @@ class _BarcodeKeyboardListenerState extends State<BarcodeKeyboardListener> {
 
   bool _isShiftPressed = false;
 
-  _BarcodeKeyboardListenerState(this._onBarcodeScannedCallback,
-      this._bufferDuration, this._useKeyDownEvent, this._caseSensitive) {
-    RawKeyboard.instance.addListener(_keyBoardCallback);
-    _keyboardSubscription =
-        _controller.stream.where((char) => char != null).listen(onKeyEvent);
+  _BarcodeKeyboardListenerState(this._onBarcodeScannedCallback, this._bufferDuration, this._useKeyDownEvent, this._caseSensitive) {
+    HardwareKeyboard.instance.addHandler(_keyBoardCallback);
+    _keyboardSubscription = _controller.stream.where((char) => char != null).listen(onKeyEvent);
   }
 
   void onKeyEvent(String? char) {
@@ -102,8 +98,7 @@ class _BarcodeKeyboardListenerState extends State<BarcodeKeyboardListener> {
 
   void checkPendingCharCodesToClear() {
     if (_lastScannedCharCodeTime != null) {
-      if (_lastScannedCharCodeTime!
-          .isBefore(DateTime.now().subtract(_bufferDuration))) {
+      if (_lastScannedCharCodeTime!.isBefore(DateTime.now().subtract(_bufferDuration))) {
         resetScannedCharCodes();
       }
     }
@@ -118,48 +113,22 @@ class _BarcodeKeyboardListenerState extends State<BarcodeKeyboardListener> {
     _scannedChars.add(charCode);
   }
 
-  void _keyBoardCallback(RawKeyEvent keyEvent) {
-    if (keyEvent.logicalKey.keyId > 255 &&
-        keyEvent.data.logicalKey != LogicalKeyboardKey.enter &&
-        keyEvent.data.logicalKey != LogicalKeyboardKey.shiftLeft) return;
-    if ((!_useKeyDownEvent && keyEvent is RawKeyUpEvent) ||
-        (_useKeyDownEvent && keyEvent is RawKeyDownEvent)) {
-      if (keyEvent.data is RawKeyEventDataAndroid) {
-        if (keyEvent.data.logicalKey == LogicalKeyboardKey.shiftLeft) {
-          _isShiftPressed = true;
-        } else {
-          if (_isShiftPressed && _caseSensitive) {
-            _isShiftPressed = false;
-            _controller.sink.add(String.fromCharCode(
-                ((keyEvent.data) as RawKeyEventDataAndroid).codePoint).toUpperCase());
-          } else {
-            _controller.sink.add(String.fromCharCode(
-                ((keyEvent.data) as RawKeyEventDataAndroid).codePoint));
-          }
-        }
-      } else if (keyEvent.data is RawKeyEventDataFuchsia) {
-        _controller.sink.add(String.fromCharCode(
-            ((keyEvent.data) as RawKeyEventDataFuchsia).codePoint));
-      } else if (keyEvent.data.logicalKey == LogicalKeyboardKey.enter) {
+  bool _keyBoardCallback(KeyEvent keyEvent) {
+    if ((!_useKeyDownEvent && keyEvent is KeyUpEvent) || (_useKeyDownEvent && keyEvent is KeyDownEvent)) {
+      if (keyEvent.logicalKey == LogicalKeyboardKey.shiftLeft) {
+        _isShiftPressed = true;
+      } else if (keyEvent.logicalKey == LogicalKeyboardKey.enter) {
         _controller.sink.add(lineFeed);
-      } else if (keyEvent.data is RawKeyEventDataWeb) {
-        _controller.sink.add(((keyEvent.data) as RawKeyEventDataWeb).keyLabel);
-      } else if (keyEvent.data is RawKeyEventDataLinux) {
-        _controller.sink
-            .add(((keyEvent.data) as RawKeyEventDataLinux).keyLabel);
-      } else if (keyEvent.data is RawKeyEventDataWindows) {
-        _controller.sink.add(String.fromCharCode(
-            ((keyEvent.data) as RawKeyEventDataWindows).keyCode));
-      } else if (keyEvent.data is RawKeyEventDataMacOs) {
-        _controller.sink
-            .add(((keyEvent.data) as RawKeyEventDataMacOs).characters);
-      } else if (keyEvent.data is RawKeyEventDataIos) {
-        _controller.sink
-            .add(((keyEvent.data) as RawKeyEventDataIos).characters);
-      } else {
-        _controller.sink.add(keyEvent.character);
+      } else if (keyEvent.logicalKey.keyId >= 0x20 && keyEvent.logicalKey.keyId <= 0x7A) {
+        var char = String.fromCharCode(keyEvent.logicalKey.keyId);
+        if (_isShiftPressed && _caseSensitive) {
+          _isShiftPressed = false;
+          char = char.toUpperCase();
+        }
+        _controller.sink.add(char);
       }
     }
+    return false;
   }
 
   @override
@@ -171,7 +140,7 @@ class _BarcodeKeyboardListenerState extends State<BarcodeKeyboardListener> {
   void dispose() {
     _keyboardSubscription.cancel();
     _controller.close();
-    RawKeyboard.instance.removeListener(_keyBoardCallback);
+    HardwareKeyboard.instance.removeHandler(_keyBoardCallback);
     super.dispose();
   }
 }
